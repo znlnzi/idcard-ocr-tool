@@ -24,9 +24,10 @@ class IDCardRecognizer:
         system = platform.system()
         
         if system == "Windows":
-            # Windows常见安装路径
+            # Windows常见安装路径（包括chocolatey安装路径）
             possible_paths = [
-                r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+                r"C:\ProgramData\chocolatey\lib\tesseract\tools\tesseract.exe",
+                r"C:\Program Files\Tesseract-OCR\tesseract.exe", 
                 r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
                 r"C:\Users\%USERNAME%\AppData\Local\Tesseract-OCR\tesseract.exe"
             ]
@@ -35,7 +36,17 @@ class IDCardRecognizer:
                 expanded_path = os.path.expandvars(path)
                 if os.path.exists(expanded_path):
                     pytesseract.pytesseract.tesseract_cmd = expanded_path
+                    print(f"找到Tesseract: {expanded_path}")
                     break
+            else:
+                # 如果都找不到，尝试从PATH中查找
+                import shutil
+                tesseract_path = shutil.which("tesseract")
+                if tesseract_path:
+                    pytesseract.pytesseract.tesseract_cmd = tesseract_path
+                    print(f"从PATH找到Tesseract: {tesseract_path}")
+                else:
+                    print("警告：未找到Tesseract OCR，OCR功能可能无法工作")
         
         # 测试Tesseract是否可用
         try:

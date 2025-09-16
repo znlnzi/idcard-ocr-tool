@@ -7,10 +7,37 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 import os
-from ..config.settings import *
-from ..utils.file_handler import FileHandler
-from ..ocr.recognizer import IDCardRecognizer
-from ..utils.excel_writer import ExcelWriter
+import sys
+
+# 修复PyInstaller打包后的导入问题
+try:
+    from ..config.settings import *
+    from ..utils.file_handler import FileHandler
+    from ..ocr.recognizer import IDCardRecognizer
+    from ..utils.excel_writer import ExcelWriter
+except ImportError:
+    # 备选导入方式
+    try:
+        from src.config.settings import *
+        from src.utils.file_handler import FileHandler
+        from src.ocr.recognizer import IDCardRecognizer
+        from src.utils.excel_writer import ExcelWriter
+    except ImportError:
+        # 最后的备选方式
+        import importlib.util
+        
+        # 动态导入配置
+        config_spec = importlib.util.find_spec("config.settings")
+        if config_spec is None:
+            # 手动查找并添加路径
+            current_dir = os.path.dirname(__file__)
+            parent_dir = os.path.dirname(current_dir)
+            sys.path.insert(0, parent_dir)
+        
+        from config.settings import *
+        from utils.file_handler import FileHandler
+        from ocr.recognizer import IDCardRecognizer
+        from utils.excel_writer import ExcelWriter
 
 
 class MainWindow:

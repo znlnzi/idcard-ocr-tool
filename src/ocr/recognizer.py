@@ -7,8 +7,24 @@ import cv2
 import pytesseract
 import re
 import os
-from .preprocessor import ImagePreprocessor
-from ..config.settings import TESSERACT_CONFIG, ID_CARD_REGIONS
+import sys
+
+# 修复PyInstaller打包后的导入问题
+try:
+    from .preprocessor import ImagePreprocessor
+    from ..config.settings import TESSERACT_CONFIG, ID_CARD_REGIONS
+except ImportError:
+    try:
+        from src.ocr.preprocessor import ImagePreprocessor
+        from src.config.settings import TESSERACT_CONFIG, ID_CARD_REGIONS
+    except ImportError:
+        # 动态路径处理
+        current_dir = os.path.dirname(__file__)
+        parent_dir = os.path.dirname(current_dir)
+        sys.path.insert(0, parent_dir)
+        
+        from ocr.preprocessor import ImagePreprocessor
+        from config.settings import TESSERACT_CONFIG, ID_CARD_REGIONS
 
 
 class IDCardRecognizer:

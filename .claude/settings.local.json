@@ -15,7 +15,8 @@
       "WebFetch(domain:www.python.org)",
       "Bash(./github-setup.sh:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

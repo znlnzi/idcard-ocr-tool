@@ -72,9 +72,21 @@ def build_executable():
         '--hidden-import=pytesseract',
         '--hidden-import=cv2',
         '--hidden-import=openpyxl',
+        '--hidden-import=tkinter',
+        '--hidden-import=tkinter.filedialog',
+        '--hidden-import=tkinter.messagebox', 
+        '--hidden-import=tkinter.ttk',
+        '--hidden-import=threading',
+        '--hidden-import=src.gui.main_window',  # 添加GUI模块
+        '--hidden-import=src.ocr.recognizer',   # 添加OCR模块
+        '--hidden-import=src.ocr.preprocessor', # 添加预处理模块
+        '--hidden-import=src.utils.file_handler', # 添加工具模块
+        '--hidden-import=src.utils.excel_writer',
+        '--hidden-import=src.config.settings',
         '--distpath=dist',              # 输出目录
         '--workpath=build',             # 工作目录
         '--specpath=.',                 # spec文件位置
+        '--paths=src',                  # 添加src到搜索路径
         'src/main.py'                   # 主程序文件
     ]
     

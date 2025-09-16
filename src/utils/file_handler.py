@@ -16,29 +16,56 @@ class FileHandler:
         """获取文件夹中的所有图片文件"""
         image_files = []
         
-        if not os.path.exists(folder_path):
-            raise ValueError(f"文件夹不存在: {folder_path}")
+        # 标准化路径
+        normalized_folder = os.path.normpath(folder_path)
+        
+        if not os.path.exists(normalized_folder):
+            raise ValueError(f"Folder not found: {normalized_folder}")
             
-        if not os.path.isdir(folder_path):
-            raise ValueError(f"路径不是文件夹: {folder_path}")
-            
+        if not os.path.isdir(normalized_folder):
+            raise ValueError(f"Path is not a directory: {normalized_folder}")
+        
+        print(f"Scanning folder: {normalized_folder}")
+        
         try:
-            for filename in os.listdir(folder_path):
-                file_path = os.path.join(folder_path, filename)
-                
-                # 检查是否是文件
-                if os.path.isfile(file_path):
-                    # 检查文件扩展名
-                    _, ext = os.path.splitext(filename.lower())
-                    if ext in SUPPORTED_IMAGE_FORMATS:
-                        image_files.append(file_path)
+            # 获取文件列表
+            files = os.listdir(normalized_folder)
+            print(f"Found {len(files)} files in directory")
+            
+            for filename in files:
+                try:
+                    file_path = os.path.join(normalized_folder, filename)
+                    
+                    # 标准化文件路径
+                    normalized_file_path = os.path.normpath(file_path)
+                    
+                    # 检查是否是文件
+                    if os.path.isfile(normalized_file_path):
+                        # 检查文件扩展名
+                        _, ext = os.path.splitext(filename.lower())
+                        if ext in SUPPORTED_IMAGE_FORMATS:
+                            # 验证文件可读性
+                            if self.validate_image_file(normalized_file_path)[0]:
+                                image_files.append(normalized_file_path)
+                                print(f"Added image file: {filename}")
+                            else:
+                                print(f"Skipped invalid image: {filename}")
+                        else:
+                            print(f"Skipped non-image file: {filename} (ext: {ext})")
+                    else:
+                        print(f"Skipped non-file: {filename}")
+                        
+                except Exception as file_error:
+                    print(f"Error processing file {filename}: {file_error}")
+                    continue
                         
         except Exception as e:
-            raise ValueError(f"读取文件夹失败: {str(e)}")
-            
+            raise ValueError(f"Failed to read folder: {str(e)}")
+        
         # 按文件名排序
         image_files.sort()
         
+        print(f"Total valid image files found: {len(image_files)}")
         return image_files
         
     def validate_image_file(self, file_path):

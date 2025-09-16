@@ -234,6 +234,14 @@ class MainWindow:
                 self.log(f"处理文件: {filename}")
                 
                 try:
+                    # 记录处理开始
+                    self.log(f"  正在处理: {os.path.basename(image_path)}")
+                    self.log(f"  完整路径: {image_path}")
+                    
+                    # 检查文件是否存在
+                    if not os.path.exists(image_path):
+                        raise FileNotFoundError(f"File not found: {image_path}")
+                    
                     # OCR识别
                     result = self.recognizer.recognize(image_path)
                     
@@ -242,13 +250,13 @@ class MainWindow:
                         ethnicity = result.get('ethnicity', '')
                         status = "成功"
                         note = ""
-                        self.log(f"  识别成功 - 姓名: {name}, 民族: {ethnicity}")
+                        self.log(f"  ✅ 识别成功 - 姓名: {name}, 民族: {ethnicity}")
                     else:
                         name = ""
                         ethnicity = ""
                         status = "失败"
                         note = result.get('error', '识别失败')
-                        self.log(f"  识别失败: {note}")
+                        self.log(f"  ❌ 识别失败: {note}")
                         
                     results.append({
                         'filename': filename,
@@ -258,14 +266,30 @@ class MainWindow:
                         'note': note
                     })
                     
-                except Exception as e:
-                    self.log(f"  处理错误: {str(e)}")
+                except FileNotFoundError as fnf_error:
+                    error_msg = f"文件未找到: {str(fnf_error)}"
+                    self.log(f"  ❌ {error_msg}")
                     results.append({
                         'filename': filename,
                         'name': "",
                         'ethnicity': "",
-                        'status': "错误",
-                        'note': str(e)
+                        'status': "文件不存在",
+                        'note': error_msg
+                    })
+                    
+                except Exception as e:
+                    error_msg = f"处理异常: {str(e)}"
+                    self.log(f"  ❌ {error_msg}")
+                    # 记录更详细的错误信息用于调试
+                    import traceback
+                    self.log(f"  详细错误: {traceback.format_exc()}")
+                    
+                    results.append({
+                        'filename': filename,
+                        'name': "",
+                        'ethnicity': "",
+                        'status': "处理错误",
+                        'note': error_msg
                     })
                     
             if self.processing:

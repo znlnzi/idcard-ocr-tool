@@ -16,13 +16,61 @@ class ImagePreprocessor:
     def load_image(self, image_path):
         """加载图像"""
         try:
-            # 使用OpenCV加载图像
-            image = cv2.imread(image_path)
+            import os
+            
+            # 标准化路径分隔符
+            normalized_path = os.path.normpath(image_path)
+            
+            # 检查文件是否存在
+            if not os.path.exists(normalized_path):
+                raise ValueError(f"File not found: {normalized_path}")
+            
+            # 方法1: 尝试直接使用OpenCV加载
+            image = cv2.imread(normalized_path)
+            
+            # 如果OpenCV加载失败（通常是中文路径问题）
             if image is None:
-                raise ValueError(f"无法加载图像: {image_path}")
+                print(f"OpenCV failed to load, trying alternative method for: {normalized_path}")
+                
+                # 方法2: 使用numpy和cv2的组合处理中文路径
+                try:
+                    # 读取文件为二进制数据
+                    with open(normalized_path, 'rb') as f:
+                        image_data = f.read()
+                    
+                    # 将二进制数据转换为numpy数组
+                    nparr = np.frombuffer(image_data, np.uint8)
+                    
+                    # 使用cv2解码图像
+                    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    
+                    if image is None:
+                        raise ValueError("Failed to decode image data")
+                        
+                except Exception as decode_error:
+                    print(f"Alternative method also failed: {decode_error}")
+                    
+                    # 方法3: 使用PIL作为最后的备选方案
+                    try:
+                        from PIL import Image as PILImage
+                        pil_image = PILImage.open(normalized_path)
+                        
+                        # 转换PIL图像为OpenCV格式
+                        image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+                        
+                        if image is None:
+                            raise ValueError("PIL conversion failed")
+                            
+                    except Exception as pil_error:
+                        raise ValueError(f"All image loading methods failed. Path: {normalized_path}, PIL error: {pil_error}")
+            
+            print(f"Successfully loaded image: {normalized_path}, shape: {image.shape}")
             return image
+            
         except Exception as e:
-            raise ValueError(f"加载图像失败: {str(e)}")
+            error_msg = f"Image loading failed: {str(e)}"
+            print(f"ERROR: {error_msg}")
+            raise ValueError(error_msg)
             
     def resize_image(self, image, max_width=1200, max_height=800):
         """调整图像大小以提高处理速度"""

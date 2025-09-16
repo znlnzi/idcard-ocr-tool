@@ -1,0 +1,145 @@
+name: Build Windows EXE (Alternative)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+        
+    - name: Install Tesseract OCR (Alternative Method)
+      run: |
+        # 方法1：尝试使用GitHub上的便携版Tesseract
+        Write-Host "Downloading portable Tesseract..."
+        $tessUrl = "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.3.3.20231005.exe"
+        $tessInstaller = "tesseract-installer.exe"
+        
+        try {
+          Invoke-WebRequest -Uri $tessUrl -OutFile $tessInstaller -UseBasicParsing
+          Write-Host "Downloaded Tesseract installer"
+          
+          # 静默安装
+          Start-Process -FilePath $tessInstaller -ArgumentList "/S" -Wait -NoNewWindow
+          Write-Host "Tesseract installation completed"
+          
+          # 清理安装包
+          Remove-Item $tessInstaller -Force -ErrorAction SilentlyContinue
+          
+        } catch {
+          Write-Host "Method 1 failed: $($_.Exception.Message)"
+          
+          # 方法2：使用chocolatey
+          Write-Host "Trying chocolatey installation..."
+          try {
+            choco install tesseract --yes --force
+            Write-Host "Chocolatey installation completed"
+          } catch {
+            Write-Host "Method 2 failed: $($_.Exception.Message)"
+            
+            # 方法3：手动下载便携版
+            Write-Host "Trying manual portable installation..."
+            $portableUrl = "https://github.com/UB-Mannheim/tesseract/releases/download/v5.3.3/tesseract-ocr-w64-setup-5.3.3.20231005.exe"
+            try {
+              Invoke-WebRequest -Uri $portableUrl -OutFile "tesseract-portable.exe" -UseBasicParsing
+              Start-Process -FilePath "tesseract-portable.exe" -ArgumentList "/S" -Wait -NoNewWindow
+              Remove-Item "tesseract-portable.exe" -Force -ErrorAction SilentlyContinue
+            } catch {
+              Write-Host "All installation methods failed"
+              exit 1
+            }
+          }
+        }
+        
+        # 查找Tesseract安装位置
+        $tessPath = ""
+        $searchPaths = @(
+          "C:\Program Files\Tesseract-OCR",
+          "C:\Program Files (x86)\Tesseract-OCR", 
+          "C:\ProgramData\chocolatey\lib\tesseract\tools"
+        )
+        
+        foreach ($path in $searchPaths) {
+          if (Test-Path "$path\tesseract.exe") {
+            $tessPath = $path
+            Write-Host "Found Tesseract at: $tessPath"
+            break
+          }
+        }
+        
+        if ($tessPath -eq "") {
+          # 全盘搜索
+          Write-Host "Searching for tesseract.exe..."
+          $found = Get-ChildItem -Path "C:\" -Name "tesseract.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($found) {
+            $tessPath = Split-Path $found.FullName
+            Write-Host "Found Tesseract at: $tessPath"
+          }
+        }
+        
+        if ($tessPath -ne "") {
+          # 添加到PATH
+          echo "$tessPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $env:PATH = "$tessPath;$env:PATH"
+          
+          # 下载中文语言包
+          $tessDataDir = "$tessPath\tessdata"
+          if (!(Test-Path $tessDataDir)) {
+            New-Item -ItemType Directory -Path $tessDataDir -Force
+          }
+          
+          Write-Host "Downloading Chinese language pack..."
+          try {
+            $langUrl = "https://raw.githubusercontent.com/tesseract-ocr/tessdata/main/chi_sim.traineddata"
+            Invoke-WebRequest -Uri $langUrl -OutFile "$tessDataDir\chi_sim.traineddata" -UseBasicParsing
+            Write-Host "Chinese language pack downloaded"
+          } catch {
+            Write-Host "Failed to download language pack: $($_.Exception.Message)"
+          }
+          
+          # 验证安装
+          Write-Host "Testing Tesseract..."
+          try {
+            & "$tessPath\tesseract.exe" --version
+            Write-Host "Tesseract is working!"
+            
+            # 列出语言
+            & "$tessPath\tesseract.exe" --list-langs
+          } catch {
+            Write-Host "Tesseract test failed: $($_.Exception.Message)"
+          }
+          
+        } else {
+          Write-Host "ERROR: Could not locate Tesseract after installation"
+          exit 1
+        }
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Build executable
+      run: |
+        python build.py
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-executable-alt
+        path: |
+          dist/*.exe
+          release/
+        retention-days: 30

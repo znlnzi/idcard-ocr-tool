@@ -22,32 +22,70 @@ jobs:
         
     - name: Install Tesseract OCR
       run: |
-        # 使用chocolatey安装Tesseract OCR（更可靠的方式）
-        choco install tesseract --yes
+        # 使用chocolatey安装Tesseract OCR
+        Write-Host "Installing Tesseract OCR via chocolatey..."
+        choco install tesseract --yes --force
         
-        # 下载中文语言包到临时目录
-        $tessDataDir = "C:\ProgramData\chocolatey\lib\tesseract\tools\tessdata"
-        if (!(Test-Path $tessDataDir)) {
-          $tessDataDir = "C:\Program Files\Tesseract-OCR\tessdata"
+        # 刷新环境变量
+        refreshenv
+        
+        # 找到Tesseract安装路径
+        $tessPath = ""
+        $possiblePaths = @(
+          "C:\ProgramData\chocolatey\lib\tesseract\tools",
+          "C:\Program Files\Tesseract-OCR",
+          "C:\Program Files (x86)\Tesseract-OCR"
+        )
+        
+        foreach ($path in $possiblePaths) {
+          if (Test-Path "$path\tesseract.exe") {
+            $tessPath = $path
+            Write-Host "Found Tesseract at: $tessPath"
+            break
+          }
         }
         
-        Write-Host "Tesseract data directory: $tessDataDir"
-        
-        # 确保目录存在
-        if (!(Test-Path $tessDataDir)) {
-          New-Item -ItemType Directory -Path $tessDataDir -Force
+        if ($tessPath -eq "") {
+          Write-Host "Tesseract not found in expected locations, searching..."
+          $tessExe = Get-ChildItem -Path "C:\" -Name "tesseract.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($tessExe) {
+            $tessPath = Split-Path $tessExe.FullName
+            Write-Host "Found Tesseract at: $tessPath"
+          }
         }
         
-        # 下载中文语言包
-        try {
-          Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata/raw/main/chi_sim.traineddata" -OutFile "$tessDataDir\chi_sim.traineddata"
-          Write-Host "Chinese language pack downloaded successfully"
-        } catch {
-          Write-Host "Failed to download Chinese language pack, continuing without it"
+        if ($tessPath -ne "") {
+          # 添加到PATH
+          echo "$tessPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $env:PATH += ";$tessPath"
+          
+          # 设置tessdata目录
+          $tessDataDir = "$tessPath\tessdata"
+          if (!(Test-Path $tessDataDir)) {
+            New-Item -ItemType Directory -Path $tessDataDir -Force
+          }
+          
+          # 下载中文语言包
+          Write-Host "Downloading Chinese language pack..."
+          try {
+            Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata/raw/main/chi_sim.traineddata" -OutFile "$tessDataDir\chi_sim.traineddata"
+            Write-Host "Chinese language pack downloaded successfully"
+          } catch {
+            Write-Host "Failed to download Chinese language pack: $($_.Exception.Message)"
+          }
+          
+          # 验证Tesseract安装
+          Write-Host "Verifying Tesseract installation..."
+          & "$tessPath\tesseract.exe" --version
+          
+          # 列出可用语言
+          Write-Host "Available languages:"
+          & "$tessPath\tesseract.exe" --list-langs
+          
+        } else {
+          Write-Host "ERROR: Could not find Tesseract installation"
+          exit 1
         }
-        
-        # 验证Tesseract安装
-        tesseract --version
         
     - name: Install Python dependencies
       run: |

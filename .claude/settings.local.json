@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(brew install:*)",
+      "Bash(HOMEBREW_NO_AUTO_UPDATE=1 brew install tesseract)",
+      "Bash(HOMEBREW_NO_AUTO_UPDATE=1 brew install tesseract-lang)",
+      "Bash(HOMEBREW_NO_AUTO_UPDATE=1 brew install --cask wine-stable)",
+      "Bash(chmod:*)",
+      "Bash(wine:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "WebFetch(domain:www.python.org)",
+      "Bash(./github-setup.sh:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

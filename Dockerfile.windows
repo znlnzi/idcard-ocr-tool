@@ -1,0 +1,41 @@
+# 使用官方Python Windows镜像
+FROM mcr.microsoft.com/windows/servercore:ltsc2022
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装Python
+RUN powershell -Command \
+    Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.9.18/python-3.9.18-amd64.exe' -OutFile 'python-installer.exe'; \
+    Start-Process -FilePath 'python-installer.exe' -ArgumentList '/quiet', 'InstallAllUsers=1', 'PrependPath=1' -Wait; \
+    Remove-Item 'python-installer.exe'
+
+# 安装Tesseract OCR
+RUN powershell -Command \
+    Invoke-WebRequest -Uri 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.3.1/tesseract-ocr-w64-setup-5.3.1.20230401.exe' -OutFile 'tesseract-installer.exe'; \
+    Start-Process -FilePath 'tesseract-installer.exe' -ArgumentList '/S' -Wait; \
+    Remove-Item 'tesseract-installer.exe'
+
+# 下载中文语言包
+RUN powershell -Command \
+    Invoke-WebRequest -Uri 'https://github.com/tesseract-ocr/tessdata/raw/main/chi_sim.traineddata' -OutFile 'chi_sim.traineddata'; \
+    Copy-Item 'chi_sim.traineddata' 'C:\Program Files\Tesseract-OCR\tessdata\'
+
+# 设置环境变量
+ENV PATH="C:\Program Files\Tesseract-OCR;${PATH}"
+
+# 复制项目文件
+COPY requirements.txt .
+COPY src/ ./src/
+COPY build.py .
+
+# 安装Python依赖
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 构建exe文件
+RUN python build.py
+
+# 创建输出目录
+VOLUME ["C:/app/dist", "C:/app/release"]
+
+CMD ["cmd"]

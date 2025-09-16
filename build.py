@@ -9,6 +9,22 @@ import shutil
 import subprocess
 from pathlib import Path
 
+# 修复Windows中文编码问题
+if sys.platform.startswith('win'):
+    import locale
+    # 设置控制台编码为UTF-8
+    try:
+        # Windows 10 build 1903+ 支持
+        os.system('chcp 65001 >nul')
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except:
+        # 向后兼容
+        locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+    
+    # 设置环境变量
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+
 
 def clean_build_dirs():
     """清理构建目录"""
@@ -16,31 +32,31 @@ def clean_build_dirs():
     
     for dir_name in dirs_to_clean:
         if os.path.exists(dir_name):
-            print(f"清理目录: {dir_name}")
+            print(f"Cleaning directory: {dir_name}")
             shutil.rmtree(dir_name)
             
     # 清理spec文件
     spec_files = [f for f in os.listdir('.') if f.endswith('.spec')]
     for spec_file in spec_files:
-        print(f"删除spec文件: {spec_file}")
+        print(f"Removing spec file: {spec_file}")
         os.remove(spec_file)
 
 
 def install_dependencies():
     """安装依赖"""
-    print("正在安装依赖...")
+    print("Installing dependencies...")
     try:
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt'])
-        print("依赖安装完成")
+        print("Dependencies installed successfully")
     except subprocess.CalledProcessError as e:
-        print(f"依赖安装失败: {e}")
+        print(f"Dependencies installation failed: {e}")
         return False
     return True
 
 
 def build_executable():
     """构建可执行文件"""
-    print("开始构建可执行文件...")
+    print("Starting executable build...")
     
     # 检测操作系统
     import platform
@@ -85,16 +101,16 @@ def build_executable():
     
     try:
         subprocess.check_call(cmd)
-        print("构建完成！")
+        print("Build completed successfully!")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"构建失败: {e}")
+        print(f"Build failed: {e}")
         return False
 
 
 def create_dist_package():
     """创建发布包"""
-    print("创建发布包...")
+    print("Creating release package...")
     
     # 创建发布目录
     release_dir = 'release'
@@ -113,7 +129,7 @@ def create_dist_package():
         shutil.copy2(exe_file, release_dir)
         print(f"已复制可执行文件到: {release_dir}")
     else:
-        print("错误: 未找到可执行文件")
+        print("ERROR: Executable file not found")
         return False
     
     # 创建使用说明
@@ -153,7 +169,7 @@ def create_dist_package():
     with open(readme_file, 'w', encoding='utf-8') as f:
         f.write(readme_content)
     
-    print(f"已创建使用说明: {readme_file}")
+    print(f"Usage instructions created: {readme_file}")
     
     # 创建示例文件夹
     examples_dir = os.path.join(release_dir, '示例图片')
@@ -173,36 +189,36 @@ def create_dist_package():
     with open(os.path.join(examples_dir, '请将身份证图片放在这里.txt'), 'w', encoding='utf-8') as f:
         f.write(example_readme)
     
-    print("发布包创建完成！")
+    print("Release package created successfully!")
     return True
 
 
 def main():
-    """主函数"""
-    print("身份证信息提取工具 - 构建脚本")
+    """Main function"""
+    print("ID Card OCR Tool - Build Script")
     print("=" * 50)
     
-    # 检查当前目录
+    # Check current directory
     if not os.path.exists('src/main.py'):
-        print("错误: 请在项目根目录下运行此脚本")
+        print("ERROR: Please run this script from project root directory")
         return
     
-    # 清理构建目录
+    # Clean build directories
     clean_build_dirs()
     
-    # 安装依赖
+    # Install dependencies
     if not install_dependencies():
-        print("构建中止: 依赖安装失败")
+        print("BUILD STOPPED: Dependencies installation failed")
         return
     
-    # 构建可执行文件
+    # Build executable
     if not build_executable():
-        print("构建中止: 可执行文件生成失败")
+        print("BUILD STOPPED: Executable generation failed")
         return
     
     # 创建发布包
     if not create_dist_package():
-        print("构建中止: 发布包创建失败")
+        print("BUILD STOPPED: Release package creation failed")
         return
     
     print("\n" + "=" * 50)

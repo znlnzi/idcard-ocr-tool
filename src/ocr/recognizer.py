@@ -12,11 +12,11 @@ import sys
 # 修复PyInstaller打包后的导入问题
 try:
     from .preprocessor import ImagePreprocessor
-    from ..config.settings import TESSERACT_CONFIG, ID_CARD_REGIONS
+    from ..config.settings import TESSERACT_CONFIG, TESSERACT_CONFIGS, ID_CARD_REGIONS, ALTERNATIVE_REGIONS
 except ImportError:
     try:
         from src.ocr.preprocessor import ImagePreprocessor
-        from src.config.settings import TESSERACT_CONFIG, ID_CARD_REGIONS
+        from src.config.settings import TESSERACT_CONFIG, TESSERACT_CONFIGS, ID_CARD_REGIONS, ALTERNATIVE_REGIONS
     except ImportError:
         # 动态路径处理
         current_dir = os.path.dirname(__file__)
@@ -24,7 +24,7 @@ except ImportError:
         sys.path.insert(0, parent_dir)
         
         from ocr.preprocessor import ImagePreprocessor
-        from config.settings import TESSERACT_CONFIG, ID_CARD_REGIONS
+        from config.settings import TESSERACT_CONFIG, TESSERACT_CONFIGS, ID_CARD_REGIONS, ALTERNATIVE_REGIONS
 
 
 class IDCardRecognizer:
@@ -71,64 +71,153 @@ class IDCardRecognizer:
             print(f"警告：Tesseract OCR未正确安装或配置: {e}")
             print("请确保已安装Tesseract OCR并正确配置路径")
             
-    def recognize(self, image_path):
+    def recognize(self, image_path, debug=False):
         """识别身份证信息"""
         try:
+            print(f"[DEBUG] 开始识别图像: {image_path}")
+            
             # 预处理图像
             processed_image = self.preprocessor.preprocess_for_ocr(image_path)
+            print(f"[DEBUG] 预处理完成，图像尺寸: {processed_image.shape}")
+            
+            # 保存调试图像
+            if debug:
+                import os
+                debug_dir = os.path.join(os.path.dirname(image_path), 'debug')
+                if not os.path.exists(debug_dir):
+                    os.makedirs(debug_dir)
+                    
+                base_name = os.path.splitext(os.path.basename(image_path))[0]
+                processed_path = os.path.join(debug_dir, f"{base_name}_processed.jpg")
+                cv2.imwrite(processed_path, processed_image)
+                print(f"[DEBUG] 预处理图像保存至: {processed_path}")
             
             # 提取文字区域
             regions = self.preprocessor.extract_text_regions(processed_image, ID_CARD_REGIONS)
+            print(f"[DEBUG] 提取到 {len(regions)} 个文字区域")
+            
+            # 保存区域调试图像
+            if debug:
+                for region_name, region_image in regions.items():
+                    region_path = os.path.join(debug_dir, f"{base_name}_{region_name}_region.jpg")
+                    cv2.imwrite(region_path, region_image)
+                    print(f"[DEBUG] {region_name}区域保存至: {region_path}")
             
             # 识别姓名
             name = ""
+            name_raw_text = ""
             if 'name' in regions:
+                name_raw_text = self.get_raw_ocr_text(regions['name'])
+                print(f"[DEBUG] 姓名区域OCR原始文本: '{name_raw_text}'")
                 name = self.recognize_name(regions['name'])
+                print(f"[DEBUG] 姓名清理后结果: '{name}'")
                 
             # 识别民族
             ethnicity = ""
+            ethnicity_raw_text = ""
             if 'ethnicity' in regions:
+                ethnicity_raw_text = self.get_raw_ocr_text(regions['ethnicity'])
+                print(f"[DEBUG] 民族区域OCR原始文本: '{ethnicity_raw_text}'")
                 ethnicity = self.recognize_ethnicity(regions['ethnicity'])
-                
-            return {
+                print(f"[DEBUG] 民族清理后结果: '{ethnicity}'")
+            
+            result = {
                 'success': True,
                 'name': name,
                 'ethnicity': ethnicity
             }
             
+            # 添加调试信息
+            if debug:
+                result['debug'] = {
+                    'name_raw_text': name_raw_text,
+                    'ethnicity_raw_text': ethnicity_raw_text,
+                    'image_shape': processed_image.shape,
+                    'regions_extracted': list(regions.keys())
+                }
+            
+            print(f"[DEBUG] 最终识别结果: 姓名='{name}', 民族='{ethnicity}'")
+            return result
+            
         except Exception as e:
+            print(f"[DEBUG] 识别过程出错: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return {
                 'success': False,
                 'error': str(e)
             }
             
-    def recognize_name(self, name_region):
-        """识别姓名"""
+    def get_raw_ocr_text(self, region_image, config_name='default'):
+        """获取原始OCR文本，用于调试"""
         try:
-            # 使用中文语言包进行OCR
-            config = TESSERACT_CONFIG + " -l chi_sim"
-            text = pytesseract.image_to_string(name_region, config=config)
+            # 使用指定的OCR配置
+            if config_name in TESSERACT_CONFIGS:
+                config = TESSERACT_CONFIGS[config_name] + " -l chi_sim"
+            else:
+                config = TESSERACT_CONFIG + " -l chi_sim"
+                
+            text = pytesseract.image_to_string(region_image, config=config)
+            return text.strip()
+        except Exception as e:
+            print(f"OCR识别失败: {e}")
+            return ""
+    
+    def get_multiple_ocr_attempts(self, region_image):
+        """使用多种OCR配置尝试识别"""
+        results = {}
+        
+        for config_name in TESSERACT_CONFIGS:
+            try:
+                config = TESSERACT_CONFIGS[config_name] + " -l chi_sim"
+                text = pytesseract.image_to_string(region_image, config=config)
+                results[config_name] = text.strip()
+            except Exception as e:
+                results[config_name] = f"Error: {str(e)}"
+                
+        return results
+    
+    def recognize_name(self, name_region):
+        """识别姓名 - 使用多种OCR配置尝试"""
+        try:
+            # 尝试多种OCR配置
+            ocr_results = self.get_multiple_ocr_attempts(name_region)
+            print(f"[DEBUG] 姓名多种OCR结果: {ocr_results}")
             
-            # 清理文本
-            name = self.clean_name_text(text)
+            # 选择最佳OCR结果
+            best_text = ""
+            for config_name, text in ocr_results.items():
+                if text and not text.startswith("Error:"):
+                    cleaned = self.clean_name_text(text)
+                    if cleaned and len(cleaned) >= len(best_text):
+                        best_text = cleaned
+                        print(f"[DEBUG] 选择{config_name}配置的结果: '{cleaned}'")
             
-            return name
+            print(f"[DEBUG] 姓名最终结果: '{best_text}'")
+            return best_text
             
         except Exception as e:
             print(f"姓名识别失败: {e}")
             return ""
             
     def recognize_ethnicity(self, ethnicity_region):
-        """识别民族"""
+        """识别民族 - 使用多种OCR配置尝试"""
         try:
-            # 使用中文语言包进行OCR
-            config = TESSERACT_CONFIG + " -l chi_sim"
-            text = pytesseract.image_to_string(ethnicity_region, config=config)
+            # 尝试多种OCR配置
+            ocr_results = self.get_multiple_ocr_attempts(ethnicity_region)
+            print(f"[DEBUG] 民族多种OCR结果: {ocr_results}")
             
-            # 清理文本
-            ethnicity = self.clean_ethnicity_text(text)
+            # 选择最佳OCR结果
+            best_text = ""
+            for config_name, text in ocr_results.items():
+                if text and not text.startswith("Error:"):
+                    cleaned = self.clean_ethnicity_text(text)
+                    if cleaned and (not best_text or len(cleaned) >= len(best_text)):
+                        best_text = cleaned
+                        print(f"[DEBUG] 选择{config_name}配置的结果: '{cleaned}'")
             
-            return ethnicity
+            print(f"[DEBUG] 民族最终结果: '{best_text}'")
+            return best_text
             
         except Exception as e:
             print(f"民族识别失败: {e}")
@@ -139,34 +228,79 @@ class IDCardRecognizer:
         if not text:
             return ""
             
+        print(f"[DEBUG] 姓名清理前: '{text}'")
+        
         # 移除空白字符
         text = text.strip()
+        print(f"[DEBUG] 去除空白后: '{text}'")
         
-        # 移除非中文字符（保留常见姓名字符）
-        text = re.sub(r'[^\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]', '', text)
+        # 保存原始文本用于备选方案
+        original_text = text
         
-        # 移除常见的OCR误识别字符
-        text = text.replace('姓名', '').replace('名', '').replace('姓', '')
+        # 移除非中文字符，但保留英文字母（少数民族姓名可能包含）
+        text = re.sub(r'[^\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u0041-\u005a\u0061-\u007a]', '', text)
+        print(f"[DEBUG] 保留中英文后: '{text}'")
         
-        # 限制长度（中文姓名一般不超过4个字）
-        if len(text) > 6:
-            text = text[:6]
+        # 移除常见的OCR误识别标签，但更保守
+        if '姓名' in text:
+            text = text.replace('姓名', '')
+        if text.startswith('名') and len(text) > 1:
+            text = text[1:]
+        if text.startswith('姓') and len(text) > 1:
+            text = text[1:]
+        
+        print(f"[DEBUG] 移除标签后: '{text}'")
+        
+        # 如果清理后为空，尝试从原始文本中提取
+        if not text.strip():
+            # 尝试提取连续的中文字符
+            chinese_matches = re.findall(r'[\u4e00-\u9fff]+', original_text)
+            if chinese_matches:
+                # 选择最长的中文字符串
+                text = max(chinese_matches, key=len)
+                print(f"[DEBUG] 从原始文本提取: '{text}'")
+        
+        # 限制长度（中文姓名一般不超过6个字）
+        if len(text) > 8:
+            text = text[:8]
             
-        return text.strip()
+        result = text.strip()
+        print(f"[DEBUG] 姓名最终结果: '{result}'")
+        return result
         
     def clean_ethnicity_text(self, text):
         """清理民族文本"""
         if not text:
             return ""
             
+        print(f"[DEBUG] 民族清理前: '{text}'")
+        
         # 移除空白字符
         text = text.strip()
+        print(f"[DEBUG] 去除空白后: '{text}'")
+        
+        # 保存原始文本
+        original_text = text
         
         # 移除非中文字符
         text = re.sub(r'[^\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]', '', text)
+        print(f"[DEBUG] 保留中文后: '{text}'")
         
-        # 移除常见的OCR误识别字符
-        text = text.replace('民族', '').replace('族', '').replace('民', '')
+        # 更保守地移除标签
+        if '民族' in text:
+            text = text.replace('民族', '')
+        # 不要随便删除"族"字，因为很多民族名都以"族"结尾
+        if text.startswith('民') and len(text) > 1 and not text.endswith('族'):
+            text = text[1:]
+        
+        print(f"[DEBUG] 移除标签后: '{text}'")
+        
+        # 如果清理后为空，尝试从原始文本中提取
+        if not text.strip():
+            chinese_matches = re.findall(r'[\u4e00-\u9fff]+', original_text)
+            if chinese_matches:
+                text = max(chinese_matches, key=len)
+                print(f"[DEBUG] 从原始文本提取: '{text}'")
         
         # 常见民族名称映射（处理OCR识别错误）
         ethnicity_map = {
@@ -244,21 +378,70 @@ class IDCardRecognizer:
             
         return text.strip()
         
-    def recognize_with_multiple_methods(self, image_path):
+    def recognize_with_multiple_methods(self, image_path, debug=False):
         """使用多种方法进行识别以提高准确率"""
         results = []
         
         try:
-            # 方法1：标准预处理
-            result1 = self.recognize(image_path)
-            results.append(result1)
+            print(f"[DEBUG] 开始多种方法识别: {image_path}")
             
-            # 方法2：不同的预处理参数
-            # 可以添加其他预处理方法
+            # 方法1：使用默认区域配置
+            result1 = self.recognize_with_regions(image_path, ID_CARD_REGIONS, debug)
+            results.append(('default', result1))
+            print(f"[DEBUG] 默认区域结果: 姓名='{result1.get('name', '')}', 民族='{result1.get('ethnicity', '')}")
+            
+            # 如果默认结果不好，尝试其他区域配置
+            if not result1.get('success') or (not result1.get('name') and not result1.get('ethnicity')):
+                # 方法2：使用备用区域配置1
+                result2 = self.recognize_with_regions(image_path, ALTERNATIVE_REGIONS['variant1'], debug)
+                results.append(('variant1', result2))
+                print(f"[DEBUG] 备用区域1结果: 姓名='{result2.get('name', '')}', 民族='{result2.get('ethnicity', '')}")
+                
+                # 方法3：使用备用区域配置2
+                result3 = self.recognize_with_regions(image_path, ALTERNATIVE_REGIONS['variant2'], debug)
+                results.append(('variant2', result3))
+                print(f"[DEBUG] 备用区域2结果: 姓名='{result3.get('name', '')}', 民族='{result3.get('ethnicity', '')}")
             
             # 选择最佳结果
-            best_result = self.select_best_result(results)
+            best_result = self.select_best_result([r[1] for r in results])
+            
+            # 添加调试信息
+            if debug:
+                best_result['debug_attempts'] = [{'method': method, 'name': r.get('name', ''), 'ethnicity': r.get('ethnicity', '')} for method, r in results]
+            
             return best_result
+            
+        except Exception as e:
+            print(f"[DEBUG] 多种方法识别失败: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+            
+    def recognize_with_regions(self, image_path, regions_config, debug=False):
+        """使用指定的区域配置进行识别"""
+        try:
+            # 预处理图像
+            processed_image = self.preprocessor.preprocess_for_ocr(image_path)
+            
+            # 提取文字区域
+            regions = self.preprocessor.extract_text_regions(processed_image, regions_config)
+            
+            # 识别姓名和民族
+            name = ""
+            ethnicity = ""
+            
+            if 'name' in regions:
+                name = self.recognize_name(regions['name'])
+                
+            if 'ethnicity' in regions:
+                ethnicity = self.recognize_ethnicity(regions['ethnicity'])
+            
+            return {
+                'success': True,
+                'name': name,
+                'ethnicity': ethnicity
+            }
             
         except Exception as e:
             return {

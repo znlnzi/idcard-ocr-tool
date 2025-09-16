@@ -8,8 +8,24 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 import datetime
 import os
-from ..config.settings import EXCEL_COLUMNS
-from .file_handler import FileHandler
+import sys
+
+# 修复PyInstaller和直接运行的导入问题
+try:
+    from ..config.settings import EXCEL_COLUMNS
+    from .file_handler import FileHandler
+except ImportError:
+    try:
+        from src.config.settings import EXCEL_COLUMNS
+        from src.utils.file_handler import FileHandler
+    except ImportError:
+        # 动态路径处理
+        current_dir = os.path.dirname(__file__)
+        parent_dir = os.path.dirname(current_dir)
+        sys.path.insert(0, parent_dir)
+        
+        from config.settings import EXCEL_COLUMNS
+        from utils.file_handler import FileHandler
 
 
 class ExcelWriter:

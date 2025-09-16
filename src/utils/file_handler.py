@@ -4,7 +4,21 @@
 """
 
 import os
-from ..config.settings import SUPPORTED_IMAGE_FORMATS
+import sys
+
+# 修复PyInstaller和直接运行的导入问题
+try:
+    from ..config.settings import SUPPORTED_IMAGE_FORMATS
+except ImportError:
+    try:
+        from src.config.settings import SUPPORTED_IMAGE_FORMATS
+    except ImportError:
+        # 动态路径处理
+        current_dir = os.path.dirname(__file__)
+        parent_dir = os.path.dirname(current_dir)
+        sys.path.insert(0, parent_dir)
+        
+        from config.settings import SUPPORTED_IMAGE_FORMATS
 
 
 class FileHandler:

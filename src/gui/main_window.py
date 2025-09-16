@@ -73,7 +73,7 @@ class MainWindow:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(4, weight=1)
+        main_frame.rowconfigure(7, weight=1)
         
         # 标题
         title_label = ttk.Label(main_frame, text=APP_NAME, font=('Arial', 16, 'bold'))
@@ -93,9 +93,18 @@ class MainWindow:
         self.output_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), padx=(10, 5), pady=5)
         ttk.Button(main_frame, text="保存为", command=self.select_output_file).grid(row=2, column=2, pady=5)
         
+        # 调试模式选择
+        debug_frame = ttk.Frame(main_frame)
+        debug_frame.grid(row=3, column=0, columnspan=3, pady=10)
+        
+        self.debug_var = tk.BooleanVar()
+        debug_check = ttk.Checkbutton(debug_frame, text="启用调试模式（保存中间图像和详细日志）", 
+                                     variable=self.debug_var)
+        debug_check.pack()
+        
         # 控制按钮
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=3, column=0, columnspan=3, pady=20)
+        button_frame.grid(row=4, column=0, columnspan=3, pady=20)
         
         self.start_button = ttk.Button(button_frame, text="开始处理", command=self.start_processing)
         self.start_button.pack(side=tk.LEFT, padx=5)
@@ -106,16 +115,16 @@ class MainWindow:
         # 进度条
         self.progress_var = tk.DoubleVar()
         self.progress_bar = ttk.Progressbar(main_frame, variable=self.progress_var, maximum=100)
-        self.progress_bar.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        self.progress_bar.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
         # 状态标签
         self.status_var = tk.StringVar(value="就绪")
         self.status_label = ttk.Label(main_frame, textvariable=self.status_var)
-        self.status_label.grid(row=5, column=0, columnspan=3, sticky=tk.W)
+        self.status_label.grid(row=6, column=0, columnspan=3, sticky=tk.W)
         
         # 日志文本框
         log_frame = ttk.LabelFrame(main_frame, text="处理日志", padding="5")
-        log_frame.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
+        log_frame.grid(row=7, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
         
@@ -127,7 +136,7 @@ class MainWindow:
         scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.log_text.configure(yscrollcommand=scrollbar.set)
         
-        main_frame.rowconfigure(6, weight=1)
+        main_frame.rowconfigure(7, weight=1)
         
     def select_folder(self):
         """选择图片文件夹"""
@@ -140,6 +149,11 @@ class MainWindow:
             if not self.output_var.get():
                 default_output = os.path.join(folder, "身份证信息提取结果.xlsx")
                 self.output_var.set(default_output)
+            
+            # 如果启用调试模式，提醒用户调试图像保存位置
+            if hasattr(self, 'debug_var') and self.debug_var.get():
+                debug_dir = os.path.join(folder, 'debug')
+                self.log(f"调试模式已启用，中间图像将保存到: {debug_dir}")
                 
     def select_output_file(self):
         """选择输出Excel文件"""
@@ -206,6 +220,8 @@ class MainWindow:
             output_file = self.output_var.get()
             
             self.log("开始扫描图片文件...")
+            if self.debug_var.get():
+                self.log("⚙️ 调试模式已启用")
             self.update_status("扫描图片文件...")
             
             # 获取所有图片文件
@@ -242,8 +258,8 @@ class MainWindow:
                     if not os.path.exists(image_path):
                         raise FileNotFoundError(f"File not found: {image_path}")
                     
-                    # OCR识别
-                    result = self.recognizer.recognize(image_path)
+                    # OCR识别（使用多种方法提高准确率）
+                    result = self.recognizer.recognize_with_multiple_methods(image_path, debug=self.debug_var.get())
                     
                     if result['success']:
                         name = result.get('name', '')
@@ -251,6 +267,20 @@ class MainWindow:
                         status = "成功"
                         note = ""
                         self.log(f"  ✅ 识别成功 - 姓名: {name}, 民族: {ethnicity}")
+                        
+                        # 显示调试信息
+                        if self.debug_var.get() and 'debug' in result:
+                            debug_info = result['debug']
+                            self.log(f"  [调试] 姓名原始OCR文本: '{debug_info.get('name_raw_text', '')}'")
+                            self.log(f"  [调试] 民族原始OCR文本: '{debug_info.get('ethnicity_raw_text', '')}'")
+                            self.log(f"  [调试] 图像尺寸: {debug_info.get('image_shape', '')}")
+                            self.log(f"  [调试] 提取区域: {debug_info.get('regions_extracted', [])}")
+                            
+                        # 如果识别成功但结果为空，给出提示
+                        if not name and not ethnicity:
+                            self.log(f"  ⚠️ 警告: 识别成功但姓名和民族均为空，可能是区域定位或文本清理问题")
+                            status = "部分成功"
+                            note = "识别到文本但姓名民族为空"
                     else:
                         name = ""
                         ethnicity = ""
@@ -305,12 +335,23 @@ class MainWindow:
                     
                     # 显示完成对话框
                     success_count = sum(1 for r in results if r['status'] == '成功')
-                    messagebox.showinfo("处理完成", 
-                                      f"处理完成！\n"
-                                      f"总文件数: {len(results)}\n"
-                                      f"成功识别: {success_count}\n"
-                                      f"失败数量: {len(results) - success_count}\n"
-                                      f"结果已保存到: {output_file}")
+                    partial_count = sum(1 for r in results if r['status'] == '部分成功')
+                    
+                    message = (f"处理完成！\n"
+                             f"总文件数: {len(results)}\n"
+                             f"完全成功: {success_count}\n")
+                    
+                    if partial_count > 0:
+                        message += f"部分成功: {partial_count}\n"
+                        
+                    message += (f"失败数量: {len(results) - success_count - partial_count}\n"
+                              f"结果已保存到: {output_file}")
+                    
+                    if self.debug_var.get():
+                        debug_dir = os.path.join(os.path.dirname(output_file), 'debug')
+                        message += f"\n\n调试图像已保存到: {debug_dir}"
+                    
+                    messagebox.showinfo("处理完成", message)
                                       
                 except Exception as e:
                     self.log(f"保存Excel文件时出错: {str(e)}")

@@ -96,6 +96,41 @@ jobs:
       run: |
         python build.py
         
+    - name: Verify build results
+      run: |
+        Write-Host "Checking build results..."
+        
+        # 检查是否生成了EXE文件
+        if (Test-Path "dist\身份证信息提取工具.exe") {
+          $exeSize = (Get-Item "dist\身份证信息提取工具.exe").Length
+          Write-Host "✅ EXE file generated successfully: $($exeSize / 1MB) MB"
+          
+          # 检查文件属性
+          $fileInfo = Get-Item "dist\身份证信息提取工具.exe"
+          Write-Host "File details:"
+          Write-Host "  - Size: $($fileInfo.Length) bytes"
+          Write-Host "  - Created: $($fileInfo.CreationTime)"
+          Write-Host "  - Modified: $($fileInfo.LastWriteTime)"
+          
+        } else {
+          Write-Host "❌ EXE file not found!"
+          exit 1
+        }
+        
+        # 检查是否有release目录
+        if (Test-Path "release") {
+          $releaseFiles = Get-ChildItem "release" -Recurse
+          Write-Host "✅ Release package contains $($releaseFiles.Count) files"
+        } else {
+          Write-Host "⚠️ Release directory not found"
+        }
+        
+        # 列出dist目录内容
+        Write-Host "📁 dist/ directory contents:"
+        Get-ChildItem "dist" | ForEach-Object {
+          Write-Host "  - $($_.Name) ($($_.Length) bytes)"
+        }
+        
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
